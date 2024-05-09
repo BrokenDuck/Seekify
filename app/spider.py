@@ -1,185 +1,174 @@
 # For typing
-import os
-from typing import List, Optional, Union
+from typing import Optional
 from __future__ import annotations
 
-# For SQL manipulation
+# For Flask
+import os
 import click
 from flask import g
+
+# For SQL manipulation
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 from app.db import db_session
 from app.models import Document, TitleTerm, BodyTerm, TitleInvertedIndex, BodyInvertedIndex
 
 # For requests
-from lxml import html
+from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import requests
 
 # For text manipulation
-import re
-from stemmer import PorterStemmer
-
-from collections import deque, Counter
+from collections import deque
 import datetime
+from app.parser import Parser
 
-class Page:
-    def __init__(self, url: str) -> None:
-        self.url = url
-        self.children = set()
-        self.parents = set()
-        self.last_modified = None
-    
-    def set_last_modified(self, last_modified: datetime.datetime) -> None:
-        self.last_modified = last_modified
-
-    def add_child(self, child: Page) -> None:
-        self.children.add(child)
-
-    def has_child(self, node: Page) -> bool:
-        return node in self.children
-
-    def add_parent(self, parent: Page) -> None:
-        self.parents.add(parent)
-
-    def has_parent(self, node: Page) -> bool:
-        return node in self.parents
-    
-    def is_older(self, time: datetime.datetime) -> bool:
-        if self.last_modified:
-            return self.last_modified < time
-        else:
-            return True
-    
-    def update(self, last_modified: datetime.datetime, title: str, body: str) -> None:
-        self.last_modified = last_modified
-        self.title = title
-        self.body = body
-        self.children = set()
-        self.parents = set()
-
-class PageGraph:
+class UniqueQueue:
     def __init__(self):
-        self.pages = set()
+        self.queue = deque()
+        self.unique_set = set()
 
-    def add_page(self, url: str) -> Page:
-        page = Page(url)
-        self.pages.add(page)
-        return page
+    def enqueue(self, item):
+        if item not in self.unique_set:
+            self.queue.append(item)
+            self.unique_set.add(item)
+
+    def dequeue(self):
+        if self.queue:
+            item = self.queue.popleft()
+            self.unique_set.remove(item)
+            return item
+        else:
+            raise IndexError("Queue is empty")
+
+    def is_empty(self):
+        return len(self.queue) == 0
+
+    def __len__(self):
+        return len(self.queue)
+
+class DocumentMap:
+    def __init__(self):
+        self.documents = {}
     
-    def contains(self, url: str) -> Optional[Page]:
-        for page in self.pages:
-            if page.url == url:
-                return page
-        return None
+    def get_document(self, url: str) -> Document:
+        if url not in self.documents:
+            doc = Document(url=url)
+            self.documents[url] = doc
+            return doc
+        else:
+            return self.documents[url]
+
+class TitleTermMap:
+    def __init__(self):
+        self.title_terms = {}
+
+    def get_title_term(self, word: str) -> TitleTerm:
+        if word not in self.title_terms:
+            title_term = TitleTerm(word=word)
+            self.title_terms[word] = title_term
+            return title_term
+        else:
+            return self.title_terms[word]
+        
+class BodyTermMap:
+    def __init__(self):
+        self.body_terms = {}
+
+    def get_body_term(self, word: str) -> BodyTerm:
+        if word not in self.body_terms:
+            title_term = TitleTerm(word=word)
+            self.body_terms[word] = title_term
+            return title_term
+        else:
+            return self.body_terms[word]
 
 class Spider:
-    def __init__(self, db: Session, stopword_filepath: str) -> None:
-        self.trees = []
-        self.crea_time = datetime.datetime.now()
+    def __init__(self, db: Session) -> None:
+        self.creation_time = datetime.datetime.now()
         self.db = db
-        self.stemmer = PorterStemmer()
-        with open(stopword_filepath, 'r') as f:
-            self.words_to_remove = set(word.strip() for word in f.readlines())
+        self.parser = Parser()
+        self.docs = DocumentMap()
+        self.title_terms = TitleTermMap()
+        self.body_terms = BodyTermMap()
 
     def crawl(self, url: str) -> None:
-        graph = PageGraph()
-        root = graph.add_page(url)
-        to_process = deque()
-        to_process.append(root)
-        while len(to_process) != 0:
-            curr_node = to_process.popleft()
-
-            # Fetch webpage
-            last_modified, urls, title, body = self.extract_data(curr_node)
-
-            # Store data
-            self.store_data(curr_node.url, title, body)
+        root = self.docs.get_document(url)
+        to_process = UniqueQueue()
+        to_process.enqueue(root)
+        while not to_process.is_empty():
+            doc = to_process.dequeue()
             
-            # Check that the node has not been modified or is a new node
-            if curr_node.is_older(last_modified):
-                curr_node.update(last_modified, title, body)
+            # Request webpage
+            response = requests.get(doc.url)
+            if response.status_code != 200:
+                print(f"Failed to fetch the webpage: {doc.url}, {response.status_code}")
+                continue
             
-                # Add links
-                for url in urls:
-                    res = graph.contains(url)
-                    if res:
-                        # The child already exists
-                        curr_node.add_child(res)
-                        res.add_parent(curr_node)
-                    else:
-                        res = graph.add_page(url)
-                        curr_node.add_child(res)
-                        res.add_parent(curr_node)
-                    # Add res to list of node to process
-                    if not res in to_process:
-                        to_process.append(res)
+            # Parse webpage
+            soup = BeautifulSoup(response.text, 'lxml')
 
-    def store_data(self, url: str, title: str, body: str) -> None:
-        title_terms = self.extract_terms(title)
-        body_terms = self.extract_terms(body)
+            # Attempt to grab the last modified time
+            last_modified_tag = soup.find('meta', attrs={'name': 'last-modified'})
+            if last_modified_tag is not None:
+                # Assuming last modification time is in a standard format like ISO 8601
+                last_modified_date = datetime.datetime.strptime(last_modified_tag['content'], "%a, %d %b %Y %H:%M:%S %Z")
 
-        try:
-            doc = Document(url, title, body)
-            db_session.add(doc)
-            for title_term, count in title_terms:
-                t_term = TitleTerm(title_term)
-                db_session.add(t_term)
-                db_session.add(TitleInvertedIndex(t_term.term_id, doc.doc_id, count))
-            for body_term, count in body_terms:
-                b_term = BodyTerm(body_term)
-                db_session.add(b_term)
-                db_session.add(BodyInvertedIndex(b_term.term_id, doc.doc_id, count))
-            db_session.commit()
-        except IntegrityError as e:
-            # Handle the integrity error
-            print("An integrity error occurred:", e)
-            # Perform error handling or rollback operations here
+                # If the last modified date of the page is not older than the new last modified date, we abort
+                if doc.last_modified is not None and doc.last_modified < last_modified_date:
+                    continue
+                
+                doc.last_modified = last_modified_date
+            else:
+                # If we were unable to grab the last modified time we set it to the current time
+                print("Last modification time not found")
+                doc.last_modified = self.creation_time
 
-    def extract_terms(self, input_string: str) -> Counter[str]:
-        # Split the input string into words
-        words = re.findall(r'\b\w+\b', input_string)
+            # Attempt the grab the page size
+            size_tag = soup.find('meta', attrs={'name': 'size'})
+            if size_tag is not None:
+                doc.size = size_tag['content']
+            else:
+                print("Page size not found")
+                doc.size = len(response.text)
 
-        # Remove words from the string if they are present in the set of words to remove
-        filtered_words = Counter(self.stemmer.stem(word, 0, len(word)-1) for word in words if word.isAlpha() and word not in self.words_to_remove)
+            # Attemp to grab the title
+            title_tag = soup.find('title')
+            if title_tag is not None:
+                doc.title = title_tag.text
+                for word, count in self.parser.parse(title_tag.text):
+                    title_term = self.title_terms.get_title_term(word)
+                    TitleInvertedIndex(term=title_term, document=doc, frequency=count)
+            else:
+                print("Title element not found")
+            
+            # Extract the body element
+            body_tag = soup.body
+            if body_tag is not None:
+                # Serialize the body element to get its inner HTML content
+                doc.content = str(body_tag)
+                for word, count in self.parse.parse(doc.body.get_text()):
+                    body_term = self.body_terms.get_body_term(word)
+                    BodyInvertedIndex(term=body_term, document=doc, frequency=count)
 
-        return filtered_words
+                for url in [urljoin(doc.url, link.get('href')) for link in body_tag.find_all('a')]:
+                    child_doc = self.docs.get_document(url)
+                    doc.children.append(child_doc)
+                    child_doc.parents.append(doc)
 
-    def extract_data(self, node: Page) -> Union[datetime.datetime, List[str], str, str]:
-        response = requests.get(node.url)
-        if response.status_code != 200:
-            print(f"Failed to fetch the webpage: {node.url}, {response.status_code}")
-            return None, None, None, None
+            else:
+                print("Body element not found")
+
+        for doc in self.docs.documents.values():
+            self.db.add(doc)
         
-        # Parse webpage
-        tree = html.fromstring(response.content)
-        # Attempt to grab the last modified time
-        last_modified_element = tree.xpath('//meta[@http-equiv="Last-Modified"]/@content')
-        if last_modified_element:
-            # Assuming last modification time is in a standard format like ISO 8601
-            last_modified_time = datetime.datetime.strptime(last_modified_element[0], "%a, %d %b %Y %H:%M:%S %Z")
-        else:
-            # If we were unable to grab the last modified time we set it to the current time
-            print("Last modification time not found")
-            last_modified_time = self.crea_time
-        # Grab children links
-        links = map(lambda s: urljoin(node.url, s), tree.xpath('//a/@href'))
-        # Attemp to grab the title
-        title_element = tree.find(".//title")
-        if title_element is not None:
-            title = title_element.text
-        else:
-            print("Title element not found")
-            title = "No title"
-        # Extract the body element
-        body_element = tree.find(".//body")
-        if body_element is not None:
-            # Serialize the body element to get its inner HTML content
-            body = html.tostring(body_element, encoding='windows-1252')
-        else:
-            print("Body element not found")
-            body = "No body"
-        return last_modified_time, list(links), title, body
+        for title_term in self.title_terms.title_terms.values():
+            self.db.add(title_term)
+        
+        for body_term in self.body_terms.body_terms.values():
+            self.db.add(body_term)
+        
+        self.db.commit()
+
     
 def get_spider() -> Spider:
     if not 'spider' in g:
