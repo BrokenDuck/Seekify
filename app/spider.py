@@ -1,16 +1,14 @@
 # For typing
-from typing import Optional
 from __future__ import annotations
 
 # For Flask
-import os
 import click
 from flask import g
 
 # For SQL manipulation
 from sqlalchemy.orm import Session
-from app.db import db_session
-from app.models import Document, TitleTerm, BodyTerm, TitleInvertedIndex, BodyInvertedIndex
+from app.db import get_db
+from app.models import Document, TitleTerm, BodyTerm, TitlePostingList, TitleCountList, BodyPostingList, BodyCountList
 
 # For requests
 from bs4 import BeautifulSoup
@@ -20,19 +18,19 @@ import requests
 # For text manipulation
 from collections import deque
 import datetime
-from app.parser import Parser
+from app.parser import Parser, get_parser
 
 class UniqueQueue:
-    def __init__(self):
+    def __init__(self) -> None:
         self.queue = deque()
         self.unique_set = set()
 
-    def enqueue(self, item):
-        if item not in self.unique_set:
-            self.queue.append(item)
-            self.unique_set.add(item)
+    def enqueue(self, doc: Document) -> None:
+        if doc not in self.unique_set:
+            self.queue.append(doc)
+            self.unique_set.add(doc)
 
-    def dequeue(self):
+    def dequeue(self) -> Document:
         if self.queue:
             item = self.queue.popleft()
             self.unique_set.remove(item)
@@ -40,10 +38,10 @@ class UniqueQueue:
         else:
             raise IndexError("Queue is empty")
 
-    def is_empty(self):
+    def is_empty(self) -> bool:
         return len(self.queue) == 0
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.queue)
 
 class DocumentMap:
@@ -83,10 +81,10 @@ class BodyTermMap:
             return self.body_terms[word]
 
 class Spider:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, parser: Parser) -> None:
         self.creation_time = datetime.datetime.now()
         self.db = db
-        self.parser = Parser()
+        self.parser = parser
         self.docs = DocumentMap()
         self.title_terms = TitleTermMap()
         self.body_terms = BodyTermMap()
@@ -135,9 +133,13 @@ class Spider:
             title_tag = soup.find('title')
             if title_tag is not None:
                 doc.title = title_tag.text
-                for word, count in self.parser.parse(title_tag.text):
-                    title_term = self.title_terms.get_title_term(word)
-                    TitleInvertedIndex(term=title_term, document=doc, frequency=count)
+                token_list, token_count = self.parser.parse(title_tag.text)
+                for pos, token in enumerate(token_list):
+                    title_term = self.title_terms.get_title_term(token)
+                    self.db.add(TitlePostingList(doc_id=doc.id, document=doc, term_id=title_term.id, term=title_term, position=pos))
+                for token, count in token_count:
+                    title_term = self.title_terms.get_title_term(token)
+                    self.db.add(TitleCountList(doc_id=doc.id, document=doc, term_id=title_term.id, term=title_term, count=count))
             else:
                 print("Title element not found")
             
@@ -146,9 +148,15 @@ class Spider:
             if body_tag is not None:
                 # Serialize the body element to get its inner HTML content
                 doc.content = str(body_tag)
-                for word, count in self.parse.parse(doc.body.get_text()):
-                    body_term = self.body_terms.get_body_term(word)
-                    BodyInvertedIndex(term=body_term, document=doc, frequency=count)
+
+                token_list, token_count = self.parser.parse(body_tag.get_text())
+                doc.size = len(token_list)
+                for pos, token in enumerate(token_list):
+                    body_term = self.body_terms.get_body_term(token)
+                    self.db.add(BodyPostingList(doc_id=doc.id, document=doc, term_id=body_term.id, term=body_term, position=pos))
+                for token, count in token_count:
+                    body_term = self.body_terms.get_body_term(token)
+                    self.db.add(BodyCountList(doc_id=doc.id, document=doc, term_id=body_term.id, term=body_term, count=count))
 
                 for url in [urljoin(doc.url, link.get('href')) for link in body_tag.find_all('a')]:
                     child_doc = self.docs.get_document(url)
@@ -158,21 +166,21 @@ class Spider:
             else:
                 print("Body element not found")
 
-        for doc in self.docs.documents.values():
-            self.db.add(doc)
+        # for doc in self.docs.documents.values():
+        #     self.db.add(doc)
         
-        for title_term in self.title_terms.title_terms.values():
-            self.db.add(title_term)
+        # for title_term in self.title_terms.title_terms.values():
+        #     self.db.add(title_term)
         
-        for body_term in self.body_terms.body_terms.values():
-            self.db.add(body_term)
+        # for body_term in self.body_terms.body_terms.values():
+        #     self.db.add(body_term)
         
         self.db.commit()
 
     
 def get_spider() -> Spider:
     if not 'spider' in g:
-        g.spider = Spider(db_session, os.path.abspath('./static/stopwords.txt'))
+        g.spider = Spider(get_db(), get_parser())
     
     return g.spider
 

@@ -1,8 +1,9 @@
 import struct
 import click
+from flask import g
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine.url import URL
-from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
+from sqlalchemy.orm import Session, scoped_session, sessionmaker, declarative_base
 from azure import identity
 
 SQL_COPT_SS_ACCESS_TOKEN = 1256 # Connection option for access tokens, as defined in msodbcsql.h
@@ -34,11 +35,14 @@ def provide_token(dialect, conn_rec, cargs, cparams):
     cparams["attrs_before"] = {SQL_COPT_SS_ACCESS_TOKEN: token_struct}
 
 db_session = scoped_session(sessionmaker(autocommit=False,
-                                         autoflush=False,
+                                         autoflush=True,
                                          bind=engine))
 
 Base = declarative_base()
 Base.query = db_session.query_property()
+
+def get_db() -> Session:
+    return db_session
 
 def init_db() -> None:
     import app.models
@@ -55,4 +59,4 @@ def init_app(app):
     app.cli.add_command(init_db_command)
 
 def shutdown_session(e=None):
-        db_session.remove()
+    db_session.remove()
