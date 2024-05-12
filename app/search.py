@@ -51,23 +51,23 @@ class Phrase:
         self.next_doc = next_doc
     
     def __eq__(self, other: Phrase) -> bool:
-        if self.next_doc == None: return False
+        if self.next_doc is None or other.next_doc is None: return False
         return self.next_doc.id == other.next_doc.id
 
     def __lt__(self, other: Phrase) -> bool:
-        if self.next_doc == None: return True
+        if self.next_doc is None or other.next_doc is None: return True
         return self.next_doc.id < other.next_doc.id
     
     def __le__(self, other: Phrase) -> bool:
-        if self.next_doc == None: return True
+        if self.next_doc is None or other.next_doc is None: return True
         return self.next_doc.id <= other.next_doc.id
     
     def __gt__(self, other: Phrase) -> bool:
-        if self.next_doc == None: return False
+        if self.next_doc is None or other.next_doc is None: return False
         return self.next_doc.id > other.next_doc.id
     
     def __ge__(self, other: Phrase) -> bool:
-        if self.nextDoc == None: return False
+        if self.next_doc is None or other.next_doc is None: return False
         return self.next_doc.id >= other.next_doc.id
 
 def prevTitleTerm(db: Session, term: TitleTerm, position: Optional[TitlePostingList]) -> Optional[TitlePostingList]:
@@ -97,12 +97,14 @@ def nextTitlePhrase(db: Session, phrase: list[TitleTerm], position: Optional[Tit
         u = nextTitleTerm(db, phrase[0], position)
         return u, u
     v = position
-    for term in phrase:
+    p = phrase
+    for term in p:
         v = nextTitleTerm(db, term, v)
     if v is None:
         return None, None
     u = v
-    for term in phrase.reverse():
+    p.reverse()
+    for term in p:
         u = prevTitleTerm(db, term, u)
     if v.id - u.id == len(phrase) - 1:
         return u, v
@@ -140,7 +142,7 @@ def title_ftd(db: Session, phrase: list[TitleTerm], doc: Document) -> int:
     if len(phrase) == 1:
         return db.scalar(\
             select(TitleCountList.count)\
-            .where((TitleCountList.term_id == phrase[0].id) & (TitleCountList.doc_id == phrase[0].id))\
+            .where((TitleCountList.term_id == phrase[0].id) & (TitleCountList.doc_id == doc.id))\
         )
     count = 0
     start, end = nextTitlePhrase(db, phrase, doc.title_postings[0])
