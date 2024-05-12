@@ -1,0 +1,17 @@
+<!doctype html>
+<title>Seekr</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<section class="content">
+  {% for result in results %}
+    <div class="page">
+      <h1 class="title">{{ result.title }}</h1>
+      <p class="url">{{ result.url }}</p>
+      <p class="metadata">{{ result.last_modified }}, {{ result.size }}</p>
+      <p class="keywords">{{ result.keywords }}</p>
+      {% for child in result.children %}
+        <p class="child-links">{{ child }}</p>
+      {% endfor %}
+      <hr>
+    </div>
+  {% endfor %}
+</section>

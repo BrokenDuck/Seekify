@@ -11,8 +11,23 @@ from __future__ import annotations
 
 class Result:
     def __init__(self, score: int) -> None:
-        self.doc = None
+        self.doc: Optional[Document] = None
         self.score = score
+
+    def populate(self) -> Result:
+        db = get_db()
+        self.title = self.doc.title
+        self.url = self.doc.url
+        self.metadata = f'{str(self.doc.last_modified)} {self.doc.size}'
+        self.keywords = [\
+            f'{word} {count}'\
+            for word, count in db.scalars(\
+                select(BodyTerm.word, BodyCountList.count)\
+                .where(with_parent(self.doc, BodyCountList.document))\
+                .join(BodyTerm, BodyCountList.term)\
+            ).all()\
+        ].join('; ')
+        self.children = [f'{child.title} {child.url}' for child in self.doc.children]
     
     def __eq__(self, other: Result) -> bool:
         return self.score == other.score
@@ -210,10 +225,9 @@ def body_Nt(db: Session, phrase: list[BodyTerm]) -> int:
         count += 1
     return count
 
-def search_db(query: str, top: int = 50):
+def search_db(query: str, top: int = 50) -> list[Document]:
     parser = get_parser()
     db = get_db()
-    # TODO: update to support phrases
     phrases = parser.parse_query(query)
 
     k1 = 1.6
@@ -295,7 +309,7 @@ def search_db(query: str, top: int = 50):
                 res.doc = body_doc
             heapq.heappushpop(results, res)
     
-    return [result for result in results if result.score != 0].reverse()
+    return [result.populate() for result in results if result.doc is not None and result.score != 0].reverse()
 
 
 @current_app.route('/login', methods=['GET', 'POST'])
@@ -312,4 +326,4 @@ def search():
         
         flash(error)
     
-    return render_template('search.html')
+    return render_template('search.html', results = res)

@@ -1,8 +1,5 @@
-pyodbc
-Flask
-SQLAlchemy
-Flask-Alembic
-uvicorn[standard]
-pydantic
-azure-identity
-lxml
+flask
+sqlalchemy
+azure-identiy
+beautifulsoup4
+nltk

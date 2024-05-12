@@ -1,6 +1,5 @@
 import struct
 import click
-from flask import g
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine.url import URL
 from sqlalchemy.orm import Session, scoped_session, sessionmaker, declarative_base

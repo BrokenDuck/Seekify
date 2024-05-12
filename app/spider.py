@@ -121,13 +121,13 @@ class Spider:
                 print("Last modification time not found")
                 doc.last_modified = self.creation_time
 
-            # Attempt the grab the page size
-            size_tag = soup.find('meta', attrs={'name': 'size'})
-            if size_tag is not None:
-                doc.size = size_tag['content']
-            else:
-                print("Page size not found")
-                doc.size = len(response.text)
+            # # Attempt the grab the page size
+            # size_tag = soup.find('meta', attrs={'name': 'size'})
+            # if size_tag is not None:
+            #     doc.size = size_tag['content']
+            # else:
+            #     print("Page size not found")
+            #     doc.size = len(response.text)
 
             # Attemp to grab the title
             title_tag = soup.find('title')
@@ -158,12 +158,15 @@ class Spider:
                     body_term = self.body_terms.get_body_term(token)
                     self.db.add(BodyCountList(doc_id=doc.id, document=doc, term_id=body_term.id, term=body_term, count=count))
 
+                doc.size = len(token_list)
+
                 for url in [urljoin(doc.url, link.get('href')) for link in body_tag.find_all('a')]:
                     child_doc = self.docs.get_document(url)
                     doc.children.append(child_doc)
                     child_doc.parents.append(doc)
 
             else:
+                doc.size = 0
                 print("Body element not found")
 
         # for doc in self.docs.documents.values():
@@ -184,15 +187,16 @@ def get_spider() -> Spider:
     
     return g.spider
 
-def init_spider():
+def init_spider(url: str):
     spider = get_spider()
 
     spider.crawl('https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm')
 
 @click.command('init-spider')
-def init_spider_command():
+@click.argument('url')
+def init_spider_command(url: str):
     """Crawl base website and index it in the database."""
-    init_spider()
+    init_spider(url)
     click.echo('Initialized spider')
 
 def init_app(app):
