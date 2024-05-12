@@ -2,6 +2,10 @@ Flask
 Flask-Migrate
 Flask-SQLAlchemy
 flask_wtf
-psycopg2
+psycopg2-binary
 python-dotenv
 SQLAlchemy
+beautifulsoup4
+nltk
+requests
+lxml
