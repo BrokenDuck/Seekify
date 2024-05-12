@@ -1,5 +1,6 @@
 from typing import Optional, List
-from sqlalchemy import Column, ForeignKey, Integer, String, Table, Time
+from sqlalchemy import Column, ForeignKey, Integer, String, Table
+import datetime
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from app.db import Base
 
@@ -18,7 +19,7 @@ class Document(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     url: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     
-    last_modified: Mapped[Time]
+    last_modified: Mapped[datetime.datetime]
     size: Mapped[int]
     title: Mapped[Optional[str]] = mapped_column(String(255))
     content: Mapped[Optional[str]]
@@ -116,7 +117,7 @@ class BodyPostingList(Base):
         return f'<BodyInvertedIndex {self.term!r} {self.document!r} {self.frequency!r}>'
     
 class BodyCountList(Base):
-    __tablename__ = 'title_count_table'
+    __tablename__ = 'body_count_table'
 
     id: Mapped[int] = mapped_column(primary_key=True)
 

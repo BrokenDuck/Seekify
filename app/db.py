@@ -43,14 +43,17 @@ Base.query = db_session.query_property()
 def get_db() -> Session:
     return db_session
 
-def init_db() -> None:
+def init_db(clear_metadata: bool = False) -> None:
     import app.models
+    if clear_metadata:
+        Base.metadata.clear()
     Base.metadata.create_all(bind=engine)
 
 @click.command('init-db')
-def init_db_command():
+@click.option('--clear_metadata', default=False, help='Wether to clear the database metadata on instantiation')
+def init_db_command(clear_metadata: bool = False):
     """Clear the existing data and create new tables."""
-    init_db()
+    init_db(clear_metadata)
     click.echo('Initialized the database.')
 
 def init_app(app):

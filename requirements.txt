@@ -3,3 +3,4 @@ sqlalchemy
 azure-identiy
 beautifulsoup4
 nltk
+pyodbc
