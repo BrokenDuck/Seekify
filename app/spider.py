@@ -7,7 +7,7 @@ from flask import g
 
 # For SQL manipulation
 from sqlalchemy.orm import Session
-from app.db import get_db
+from app import db
 from app.models import Document, TitleTerm, BodyTerm, TitlePostingList, TitleCountList, BodyPostingList, BodyCountList
 
 # For requests
@@ -183,14 +183,15 @@ class Spider:
     
 def get_spider() -> Spider:
     if not 'spider' in g:
-        g.spider = Spider(get_db(), get_parser())
+        g.spider = Spider(db, get_parser())
     
     return g.spider
 
 def init_spider(url: str):
     spider = get_spider()
 
-    spider.crawl('https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm')
+    # https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
+    spider.crawl(url)
 
 @click.command('init-spider')
 @click.argument('url')

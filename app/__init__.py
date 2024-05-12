@@ -1,34 +1,43 @@
 import os
-from flask import Flask
+from datetime import datetime
 
-def create_app(test_config=None):
-    # create and configure the app
-    app = Flask(__name__, instance_relative_config=True)
-    
-    # Initial config for flask application
-    app.config.from_mapping(
-        SECRET_KEY='dev',
-    )
+from flask import Flask, redirect, render_template, request, send_from_directory, url_for
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 
-    # Load in test configuration if available
-    if test_config is None:
-        # load the instance config, if it exists, when not testing
-        app.config.from_pyfile('config.py', silent=True)
-    else:
-        # load the test config if passed in
-        app.config.from_mapping(test_config)
+# need to run python3 -m nltk.downloader punkt stopwords
 
-    # Database connection initialisation
-    from . import db
-    db.init_app(app)
+app = Flask(__name__, static_folder='static')
+csrf = CSRFProtect(app)
 
-    # Spider initialization
-    from . import spider
-    spider.init_app(app)
+# WEBSITE_HOSTNAME exists only in production environment
+if 'WEBSITE_HOSTNAME' not in os.environ:
+    # local development, where we'll use environment variables
+    print("Loading config.development and environment variables from .env file.")
+    app.config.from_object('azureproject.development')
+else:
+    # production
+    print("Loading config.production.")
+    app.config.from_object('azureproject.production')
 
-    # a simple page that says hello
-    @app.route('/hello')
-    def hello():
-        return 'Hello, World!'
+app.config.update(
+    SQLALCHEMY_DATABASE_URI=app.config.get('DATABASE_URI'),
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+)
 
-    return app
+# Initialize the database connection
+db = SQLAlchemy(app)
+
+# Enable Flask-Migrate commands "flask db init/migrate/upgrade" to work
+migrate = Migrate(app, db)
+
+# The import must be done after db initialization due to circular import issue
+from app.models import Document, TitleTerm, BodyTerm, TitlePostingList, BodyPostingList, TitleCountList, BodyCountList
+
+from app.spider import init_app
+init_app(app)
+
+@app.route('/hello')
+def hello():
+    return 'Hello, World!'

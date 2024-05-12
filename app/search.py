@@ -4,7 +4,7 @@ from flask import current_app, flash, render_template, request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, with_parent
 from app.parser import get_parser
-from db import  get_db
+from app import db
 from app.models import Document, TitleTerm, BodyTerm, TitlePostingList, BodyPostingList, TitleCountList, BodyCountList
 import heapq
 from __future__ import annotations
@@ -15,7 +15,6 @@ class Result:
         self.score = score
 
     def populate(self) -> Result:
-        db = get_db()
         self.title = self.doc.title
         self.url = self.doc.url
         self.metadata = f'{str(self.doc.last_modified)} {self.doc.size}'
@@ -227,7 +226,6 @@ def body_Nt(db: Session, phrase: list[BodyTerm]) -> int:
 
 def search_db(query: str, top: int = 50) -> list[Document]:
     parser = get_parser()
-    db = get_db()
     phrases = parser.parse_query(query)
 
     k1 = 1.6

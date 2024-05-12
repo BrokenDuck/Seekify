@@ -2,18 +2,18 @@ from typing import Optional, List
 from sqlalchemy import Column, ForeignKey, Integer, String, Table
 import datetime
 from sqlalchemy.orm import relationship, mapped_column, Mapped
-from app.db import Base
+from app import db
 
 """Contains the SQL Schema definitions"""
 
 document_to_document = Table(
     "document_to_document",
-    Base.metadata,
-    Column("left_id", Integer, ForeignKey("documents.doc_id"), primary_key=True),
-    Column("right_id", Integer, ForeignKey("documents.doc_id"), primary_key=True)
+    db.metadata,
+    Column("left_id", Integer, ForeignKey("document_table.id"), primary_key=True),
+    Column("right_id", Integer, ForeignKey("document_table.id"), primary_key=True)
 )
 
-class Document(Base):
+class Document(db.Model):
     __tablename__ = 'document_table'
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -47,7 +47,7 @@ class Document(Base):
     def __repr__(self) -> str:
         return f'<Document {self.url!r} {self.title!r}>'
 
-class TitleTerm(Base):
+class TitleTerm(db.Model):
     __tablename__ = "title_term_table"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -59,7 +59,7 @@ class TitleTerm(Base):
     def __repr__(self) -> str:
         return f'<TitleTerm {self.word!r}>'
 
-class BodyTerm(Base):
+class BodyTerm(db.Model):
     __tablename__ = "body_term_table"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -71,7 +71,7 @@ class BodyTerm(Base):
     def __repr__(self) -> str:
         return f'<TitleTerm {self.word!r}>'
 
-class TitlePostingList(Base):
+class TitlePostingList(db.Model):
     __tablename__ = 'title_posting_table'
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -86,14 +86,14 @@ class TitlePostingList(Base):
     def __repr__(self) -> str:
         return f'<TitlePostingList {self.term!r} {self.document!r} {self.frequency!r}>'
 
-class TitleCountList(Base):
+class TitleCountList(db.Model):
     __tablename__ = 'title_count_table'
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
     doc_id: Mapped[int] = mapped_column(ForeignKey("document_table.id"))
     document: Mapped["Document"] = relationship("Document", back_populates="title_counts") # To generate forward index
-    term_id: Mapped[int] = mapped_column(ForeignKey("title_term.id"))
+    term_id: Mapped[int] = mapped_column(ForeignKey("title_term_table.id"))
     term: Mapped["TitleTerm"] = relationship("TitleTerm", back_populates="counts") # To generate dictionary
 
     count: Mapped[int]
@@ -101,14 +101,14 @@ class TitleCountList(Base):
     def __repr__(self) -> str:
         return f'<TitleCountList {self.term!r} {self.document!r} {self.count}'
 
-class BodyPostingList(Base):
+class BodyPostingList(db.Model):
     __tablename__ = 'body_posting_list'
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
     doc_id: Mapped[int] = mapped_column(ForeignKey("document_table.id"))
     document: Mapped["Document"] = relationship("Document", back_populates="body_postings") # To generate forward index
-    term_id: Mapped[int] = mapped_column(ForeignKey("body_term.id"))
+    term_id: Mapped[int] = mapped_column(ForeignKey("body_term_table.id"))
     term: Mapped["BodyTerm"] = relationship("BodyTerm", back_populates="postings") # To generate dictionary
 
     position: Mapped[int]
@@ -116,14 +116,14 @@ class BodyPostingList(Base):
     def __repr__(self) -> str:
         return f'<BodyInvertedIndex {self.term!r} {self.document!r} {self.frequency!r}>'
     
-class BodyCountList(Base):
+class BodyCountList(db.Model):
     __tablename__ = 'body_count_table'
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
     doc_id: Mapped[int] = mapped_column(ForeignKey("document_table.id"))
     document: Mapped["Document"] = relationship("Document", back_populates="body_counts") # To generate forward index
-    term_id: Mapped[int] = mapped_column(ForeignKey("body_term.id"))
+    term_id: Mapped[int] = mapped_column(ForeignKey("body_term_table.id"))
     term: Mapped["TitleTerm"] = relationship("BodyTerm", back_populates="counts") # To generate dictionary
 
     count: Mapped[int]

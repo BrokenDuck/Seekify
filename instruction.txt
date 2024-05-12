@@ -1,1 +1,0 @@
-az webapp up --resource-group COMP4321-WebApp --name comp4321-search
