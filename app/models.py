@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Set
 from sqlalchemy import Column, ForeignKey, Integer, String, Table
 import datetime
 from sqlalchemy.orm import relationship, mapped_column, Mapped
@@ -29,14 +29,14 @@ class Document(db.Model):
     body_postings: Mapped[List["BodyPostingList"]] = relationship("BodyPostingList", back_populates="document") # To generate forward index
     body_counts: Mapped[List["BodyCountList"]] = relationship("BodyCountList", back_populates="document") # To generate forward index
 
-    parents: Mapped[List["Document"]] = relationship(
+    parents: Mapped[Set["Document"]] = relationship(
         "Document",
         secondary=document_to_document,
         primaryjoin=id == document_to_document.c.left_id,
         secondaryjoin=id == document_to_document.c.right_id,
         back_populates="children"
     )
-    children: Mapped[List["Document"]] = relationship(
+    children: Mapped[Set["Document"]] = relationship(
         "Document",
         secondary=document_to_document,
         primaryjoin=id == document_to_document.c.right_id,
@@ -45,7 +45,7 @@ class Document(db.Model):
     )
     
     def __repr__(self) -> str:
-        return f'<Document {self.url!r} {self.title!r}>'
+        return f'<Document {self.url!r} {self.title!r} {self.last_modified!r} {self.size!r}>'
 
 class TitleTerm(db.Model):
     __tablename__ = "title_term_table"
@@ -69,7 +69,7 @@ class BodyTerm(db.Model):
     counts: Mapped[List["BodyCountList"]] = relationship("BodyCountList", back_populates="term")
 
     def __repr__(self) -> str:
-        return f'<TitleTerm {self.word!r}>'
+        return f'<BodyTerm {self.word!r}>'
 
 class TitlePostingList(db.Model):
     __tablename__ = 'title_posting_table'
@@ -99,7 +99,7 @@ class TitleCountList(db.Model):
     count: Mapped[int]
 
     def __repr__(self) -> str:
-        return f'<TitleCountList {self.term!r} {self.document!r} {self.count}'
+        return f'<TitleCountList {self.term!r} {self.document!r} {self.count}>'
 
 class BodyPostingList(db.Model):
     __tablename__ = 'body_posting_list'
@@ -129,4 +129,4 @@ class BodyCountList(db.Model):
     count: Mapped[int]
 
     def __repr__(self) -> str:
-        return f'<BodyCountList {self.term!r} {self.document!r} {self.count}'
+        return f'<BodyCountList {self.term!r} {self.document!r} {self.count}>'

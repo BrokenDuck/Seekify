@@ -1,8 +1,10 @@
 import os
 from datetime import datetime
 
-from flask import Flask, redirect, render_template, request, send_from_directory, url_for
+import click
+from flask import Flask, redirect, render_template, request, url_for
 from flask_migrate import Migrate
+from sqlalchemy.orm import DeclarativeBase
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 
@@ -26,8 +28,11 @@ app.config.update(
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
 )
 
+class Base(DeclarativeBase):
+    pass
+
 # Initialize the database connection
-db = SQLAlchemy(app)
+db = SQLAlchemy(app, model_class=Base)
 
 # Enable Flask-Migrate commands "flask db init/migrate/upgrade" to work
 migrate = Migrate(app, db)
@@ -38,6 +43,38 @@ from app.models import Document, TitleTerm, BodyTerm, TitlePostingList, BodyPost
 from app.spider import init_app
 init_app(app)
 
+def init_db():
+    db.drop_all()
+    db.create_all()
+    db.session.commit()
+
+@click.command('init-db')
+def init_db_command():
+    init_db()
+    click.echo("Initialized db")
+
+app.cli.add_command(init_db_command)
+
+from app.spider import init_app
+init_app(app)
+
 @app.route('/hello')
 def hello():
     return 'Hello, World!'
+
+@app.route('/', methods=['GET'])
+def base():
+    return render_template('base.html')
+
+from app.search import search_db
+
+@app.route('/search', methods=['GET'])
+def search():
+    if 'q' in request.args:
+        search_string = request.args['q']
+    else:
+        return redirect(url_for('index'))
+    
+    res = search_db(search_string)
+
+    return render_template('search.html', results = res)

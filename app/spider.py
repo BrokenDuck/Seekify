@@ -6,6 +6,7 @@ import click
 from flask import g
 
 # For SQL manipulation
+from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import Session
 from app import db
 from app.models import Document, TitleTerm, BodyTerm, TitlePostingList, TitleCountList, BodyPostingList, BodyCountList
@@ -47,14 +48,15 @@ class UniqueQueue:
 class DocumentMap:
     def __init__(self):
         self.documents = {}
+        self.count = {}
     
-    def get_document(self, url: str) -> Document:
+    def get_document(self, url: str) -> tuple[Document, int]:
         if url not in self.documents:
             doc = Document(url=url)
             self.documents[url] = doc
-            return doc
-        else:
-            return self.documents[url]
+            self.count[url] = 0
+        self.count[url] += 1
+        return self.documents[url], self.count[url]
 
 class TitleTermMap:
     def __init__(self):
@@ -74,23 +76,23 @@ class BodyTermMap:
 
     def get_body_term(self, word: str) -> BodyTerm:
         if word not in self.body_terms:
-            title_term = TitleTerm(word=word)
+            title_term = BodyTerm(word=word)
             self.body_terms[word] = title_term
             return title_term
         else:
             return self.body_terms[word]
 
 class Spider:
-    def __init__(self, db: Session, parser: Parser) -> None:
+    def __init__(self, db: SQLAlchemy, parser: Parser) -> None:
         self.creation_time = datetime.datetime.now()
-        self.db = db
+        self.db = db.session
         self.parser = parser
         self.docs = DocumentMap()
         self.title_terms = TitleTermMap()
         self.body_terms = BodyTermMap()
 
     def crawl(self, url: str) -> None:
-        root = self.docs.get_document(url)
+        root, _ = self.docs.get_document(url)
         to_process = UniqueQueue()
         to_process.enqueue(root)
         while not to_process.is_empty():
@@ -137,9 +139,9 @@ class Spider:
                 for pos, token in enumerate(token_list):
                     title_term = self.title_terms.get_title_term(token)
                     self.db.add(TitlePostingList(doc_id=doc.id, document=doc, term_id=title_term.id, term=title_term, position=pos))
-                for token, count in token_count:
+                for token in token_count:
                     title_term = self.title_terms.get_title_term(token)
-                    self.db.add(TitleCountList(doc_id=doc.id, document=doc, term_id=title_term.id, term=title_term, count=count))
+                    self.db.add(TitleCountList(doc_id=doc.id, document=doc, term_id=title_term.id, term=title_term, count=token_count[token]))
             else:
                 print("Title element not found")
             
@@ -154,20 +156,30 @@ class Spider:
                 for pos, token in enumerate(token_list):
                     body_term = self.body_terms.get_body_term(token)
                     self.db.add(BodyPostingList(doc_id=doc.id, document=doc, term_id=body_term.id, term=body_term, position=pos))
-                for token, count in token_count:
+                for token in token_count:
                     body_term = self.body_terms.get_body_term(token)
-                    self.db.add(BodyCountList(doc_id=doc.id, document=doc, term_id=body_term.id, term=body_term, count=count))
+                    self.db.add(BodyCountList(doc_id=doc.id, document=doc, term_id=body_term.id, term=body_term, count=token_count[token]))
 
                 doc.size = len(token_list)
 
                 for url in [urljoin(doc.url, link.get('href')) for link in body_tag.find_all('a')]:
-                    child_doc = self.docs.get_document(url)
-                    doc.children.append(child_doc)
-                    child_doc.parents.append(doc)
+                    child_doc, count = self.docs.get_document(url)
+                    doc.children.add(child_doc)
+                    child_doc.parents.add(doc)
+                    if count < 3:
+                        to_process.enqueue(child_doc)
 
             else:
                 doc.size = 0
                 print("Body element not found")
+            
+            # print(doc)
+            # print(len(doc.title_counts))
+            # for count in doc.title_counts:
+            #     print(count)
+            # print(len(doc.body_counts))
+            # for count in doc.body_counts:
+            #     print(count)
 
         # for doc in self.docs.documents.values():
         #     self.db.add(doc)

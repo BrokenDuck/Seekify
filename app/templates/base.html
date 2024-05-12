@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Seekr</title>
+</head>
+<body>
+    <div class="search-container">
+        <input type="text" class="search-box" id="search-box" placeholder="Search...">
+        <button class="search-button" id="search-button">Search</button>
+    </div>
+
+    <script>
+        document.getElementById('search-button').addEventListener('click', () => {
+            var query = document.getElementById('search-box').value;
+            window.location.href += "search?q=" + encodeURIComponent(query);
+        });
+    </script>
+</body>
+</html>

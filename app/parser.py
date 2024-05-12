@@ -14,27 +14,37 @@ class Parser:
         tokens = word_tokenize(content)
 
         # Filter out the stopwords
-        filtered_tokens = [word for word in tokens if word.lower() not in self.stopwords]
+        filtered_tokens = [word.lower() for word in tokens if word.isalpha() and word.lower() not in self.stopwords]
 
         # Stem the token using the PorterStemmer
-        stemmed_tokens = map(lambda w: self.stemmer.stem(w, 0, len(w)-1), filtered_tokens)
+        stemmed_tokens = list(map(lambda w: self.stemmer.stem(w), filtered_tokens))
 
         return stemmed_tokens, Counter(stemmed_tokens)
     
     def parse_query(self, content: str) -> list[list[str]]:
         if '"' in content:
             expr = r'\w+|[^\w\s]+|"[^"]*"'
-            tokens = [word_tokenize(part) for part in regexp_tokenize(content, expr)]
+            phrases = [word_tokenize(part) for part in regexp_tokenize(content, expr)]
+
+            filtered_phrases = [[word.lower() for word in phrase if word.isalpha() and word.lower() not in self.stopwords] for phrase in phrases]
+
+            stemmed_phrases = list(map(lambda w: [self.stemmer.stem(t) for t in w], filtered_phrases))
+
+            return stemmed_phrases
         else: 
             tokens = word_tokenize(content)
+
+            # Filter out the stopwords
+            filtered_tokens = [word.lower() for word in tokens if word.isalpha() and word.lower() not in self.stopwords]
+
+            # Stem the token using the PorterStemmer
+            stemmed_tokens = list(map(lambda w: [self.stemmer.stem(w)], filtered_tokens))
+
+            return stemmed_tokens
+
+            
         
-        # Filter out the stopwords
-        filtered_tokens = [word for word in tokens if word.lower() not in self.stopwords]
-
-        # Stem the token using the PorterStemmer
-        stemmed_tokens = map(lambda w: self.stemmer.stem(w, 0, len(w)-1), filtered_tokens)
-
-        return stemmed_tokens
+        
 
 
 

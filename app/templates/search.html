@@ -6,7 +6,7 @@
     <div class="page">
       <h1 class="title">{{ result.title }}</h1>
       <p class="url">{{ result.url }}</p>
-      <p class="metadata">{{ result.last_modified }}, {{ result.size }}</p>
+      <p class="metadata">{{ result.metadata }}</p>
       <p class="keywords">{{ result.keywords }}</p>
       {% for child in result.children %}
         <p class="child-links">{{ child }}</p>
